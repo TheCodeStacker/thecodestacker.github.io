@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { parseTelegramMentions } from './textParser.js';
 
-const BASE_URL = 'http://localhost:8000';
+const BASE_URL = 'https://thecodestacker.github.io';
 const contentCache = new Map();
 
 const dataRegistry = {
