@@ -1,9 +1,5 @@
 import { state } from '../utils/state.js';
-
-const languages = {
-	en: { countryCode: 'US', name: 'English', nativeName: 'English (US)' },
-	id: { countryCode: 'ID', name: 'Bahasa Indonesia', nativeName: 'Indonesia' }
-};
+import { languageConfig } from '../config/languages.js';
 
 const bgColors = [
 	'linear-gradient(135deg, #eff6ff, #dbeafe)',
@@ -53,7 +49,7 @@ export function renderLanguageModal() {
 	let buttons = '';
 	let idx = 0;
 	
-	for (const [code, lang] of Object.entries(languages)) {
+	for (const [code, lang] of Object.entries(languageConfig)) {
 		const flag = getFlag(lang.countryCode);
 		const bg = bgColors[idx++ % bgColors.length];
 		
@@ -104,7 +100,7 @@ export function renderLanguageModal() {
 	modal.addEventListener('click', eventHandlers.modalClickHandler);
 	closeBtn.addEventListener('click', eventHandlers.closeClickHandler);
 	
-	Object.keys(languages).forEach(code => {
+	Object.keys(languageConfig).forEach(code => {
 		const btn = document.getElementById(`modal-lang-${code}`);
 		if (btn) {
 			eventHandlers.langClickHandlers[code] = () => {
@@ -154,16 +150,14 @@ export function closeLanguageModal() {
 		modalContent.classList.remove('scale-100', 'opacity-100');
 		modalContent.classList.add('scale-95', 'opacity-0');
 		
-		setTimeout(() => {
-			modal.classList.add('hidden');
-		}, 300);
+		setTimeout(() => modal.classList.add('hidden'), 300);
 	}
 }
 
 function updateModalHighlight() {
 	const current = state.getLang();
 	
-	Object.keys(languages).forEach(code => {
+	Object.keys(languageConfig).forEach(code => {
 		const btn = document.getElementById(`modal-lang-${code}`);
 		if (!btn) return;
 		

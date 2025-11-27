@@ -1,3 +1,5 @@
+import { supportedLangs } from '../config/languages.js';
+
 class State {
 	constructor() {
 		this.currentLang = 'en';
@@ -9,8 +11,10 @@ class State {
 	}
 
 	setLang(lang, skipHashUpdate = false) {
-		if (lang !== this.currentLang) {
-			this.currentLang = lang;
+		const validLang = supportedLangs.includes(lang) ? lang : 'en';
+		
+		if (validLang !== this.currentLang) {
+			this.currentLang = validLang;
 			if (!skipHashUpdate) this.updateHash();
 			this.notify();
 		}
