@@ -1,8 +1,9 @@
-import { getDataFiles } from '../utils/dataLoader.js';
 import { state } from '../utils/state.js';
 import { openLanguageModal } from './languageModal.js';
+import { buildStructure } from '../utils/structureLoader.js';
 
 let isOpen = false;
+let openGroups = new Set();
 let eventHandlers = {
 	toggleHandler: null,
 	closeHandler: null,
@@ -10,7 +11,8 @@ let eventHandlers = {
 	headerHandler: null,
 	languageHandler: null,
 	hashChangeHandler: null,
-	sidebarItemHandlers: []
+	sidebarItemHandlers: [],
+	groupToggleHandlers: []
 };
 
 function cleanupEventHandlers() {
@@ -43,6 +45,134 @@ function cleanupEventHandlers() {
 		if (element) element.removeEventListener('click', handler);
 	});
 	eventHandlers.sidebarItemHandlers = [];
+	
+	eventHandlers.groupToggleHandlers.forEach(({ element, handler }) => {
+		if (element) element.removeEventListener('click', handler);
+	});
+	eventHandlers.groupToggleHandlers = [];
+}
+
+function toggleGroup(groupId) {
+	if (openGroups.has(groupId)) {
+		openGroups.delete(groupId);
+	} else {
+		openGroups.add(groupId);
+	}
+	renderSidebarContent();
+}
+
+function renderGroupItems(groupKey, groupData, lang) {
+	const query = lang !== 'en' ? `?lang=${lang}` : '';
+	const isOpen = openGroups.has(groupKey);
+	
+	let subgroupsHtml = '';
+	
+	if (groupData.children) {
+		for (const [subKey, subData] of Object.entries(groupData.children)) {
+			if (subData.children) {
+				const subgroupId = `${groupKey}-${subKey}`;
+				const isSubOpen = openGroups.has(subgroupId);
+				
+				let itemsHtml = '';
+				for (const [itemKey, itemData] of Object.entries(subData.children)) {
+					itemsHtml += `
+						<a href="#${itemKey}${query}" 
+						   class="sidebar-item flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg ml-6 transition" 
+						   data-page="${itemKey}">
+							<div class="bg-blue-100 p-1 rounded">
+								<i data-feather="${itemData.icon}" class="w-3.5 h-3.5 text-blue-600"></i>
+							</div>
+							<span class="text-sm">${itemData.title}</span>
+						</a>
+					`;
+				}
+				
+				subgroupsHtml += `
+					<div class="ml-2 mt-2">
+						<button class="group-toggle w-full flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-indigo-50 rounded-lg transition text-left" 
+						        data-group="${subgroupId}">
+							<i data-feather="${isSubOpen ? 'chevron-down' : 'chevron-right'}" class="w-4 h-4 text-indigo-600"></i>
+							<div class="bg-indigo-100 p-1 rounded">
+								<i data-feather="${subData.icon}" class="w-3.5 h-3.5 text-indigo-600"></i>
+							</div>
+							<span class="text-sm font-semibold">${subData.title}</span>
+						</button>
+						<div class="subgroup-items ${isSubOpen ? '' : 'hidden'} ml-1 space-y-1 mt-1.5">
+							${itemsHtml}
+						</div>
+					</div>
+				`;
+			} else if (subData.path) {
+				subgroupsHtml += `
+					<a href="#${subKey}${query}" 
+					   class="sidebar-item flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg ml-2 mt-1 transition" 
+					   data-page="${subKey}">
+						<div class="bg-blue-100 p-1 rounded">
+							<i data-feather="${subData.icon}" class="w-3.5 h-3.5 text-blue-600"></i>
+						</div>
+						<span class="text-sm">${subData.title}</span>
+					</a>
+				`;
+			}
+		}
+	}
+	
+	return `
+		<div class="mb-3 px-1">
+			<button class="group-toggle w-full flex items-center gap-2.5 px-4 py-2.5 text-gray-800 bg-blue-50 hover:bg-blue-100 rounded-lg transition font-bold text-left border border-blue-200" 
+			        data-group="${groupKey}">
+				<i data-feather="${isOpen ? 'chevron-down' : 'chevron-right'}" class="w-5 h-5 text-blue-600"></i>
+				<div class="bg-blue-600 p-1.5 rounded-lg">
+					<i data-feather="${groupData.icon}" class="w-5 h-5 text-white"></i>
+				</div>
+				<span>${groupData.title}</span>
+			</button>
+			<div class="group-items ${isOpen ? '' : 'hidden'} space-y-1.5 mt-2 pl-2">
+				${subgroupsHtml}
+			</div>
+		</div>
+	`;
+}
+
+async function renderSidebarContent() {
+	const nav = document.querySelector('#sidebar-content nav');
+	if (!nav) return;
+	
+	const lang = state.getLang();
+	const registry = await buildStructure(lang);
+	
+	let html = '';
+	for (const [key, data] of Object.entries(registry)) {
+		if (data.type === 'group') {
+			html += renderGroupItems(key, data, lang);
+		}
+	}
+	
+	nav.innerHTML = html;
+	
+	document.querySelectorAll('.group-toggle').forEach(btn => {
+		const groupId = btn.dataset.group;
+		const handler = (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			toggleGroup(groupId);
+		};
+		eventHandlers.groupToggleHandlers.push({ element: btn, handler });
+		btn.addEventListener('click', handler);
+	});
+	
+	document.querySelectorAll('.sidebar-item').forEach(item => {
+		const handler = () => {
+			if (window.innerWidth < 1024) {
+				setTimeout(() => toggleSidebar(false), 150);
+			}
+		};
+		eventHandlers.sidebarItemHandlers.push({ element: item, handler });
+		item.addEventListener('click', handler);
+	});
+	
+	updateActiveItem();
+	feather.replace();
 }
 
 export async function renderSidebar() {
@@ -51,39 +181,28 @@ export async function renderSidebar() {
 	const render = async () => {
 		cleanupEventHandlers();
 		
-		const files = await getDataFiles();
-		const lang = state.getLang();
-		const query = lang !== 'en' ? `?lang=${lang}` : '';
-		
-		const items = files.map(f => `
-			<a href="#${f.id}${query}" class="sidebar-item flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200 rounded-lg mx-2" data-page="${f.id}">
-				<i data-feather="${f.icon}" class="w-5 h-5 flex-shrink-0"></i>
-				<span class="font-medium truncate text-sm">${f.title}</span>
-			</a>
-		`).join('');
-		
 		el.innerHTML = `
-			<button id="sidebar-toggle" class="fixed top-4 right-4 z-50 lg:hidden bg-blue-600 text-white p-3 rounded-lg shadow-lg hover:bg-blue-700 transition-all hover:scale-110">
+			<button id="sidebar-toggle" class="fixed top-4 right-4 z-50 lg:hidden bg-blue-600 text-white p-3 rounded-xl shadow-lg hover:shadow-xl transition">
 				<i data-feather="menu" class="w-6 h-6"></i>
 			</button>
-			<div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 lg:hidden hidden transition-opacity duration-300"></div>
-			<div id="sidebar-content" class="fixed lg:sticky top-0 left-0 z-40 w-64 bg-white border-r border-gray-200 h-screen flex flex-col transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-out">
-				<div class="p-4 border-b border-gray-200 flex items-center justify-between gap-2">
-					<button id="sidebar-header" class="flex items-center gap-3 hover:opacity-80 lg:cursor-default lg:hover:opacity-100 transition-opacity flex-1 min-w-0">
+			<div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 lg:hidden hidden transition-opacity"></div>
+			<div id="sidebar-content" class="fixed lg:sticky top-0 left-0 z-40 w-64 bg-white border-r border-gray-200 h-screen flex flex-col transform -translate-x-full lg:translate-x-0 transition-transform shadow-xl">
+				<div class="p-4 border-b border-gray-200 bg-blue-50 flex items-center justify-between gap-2">
+					<button id="sidebar-header" class="flex items-center gap-3 hover:opacity-80 lg:cursor-default lg:hover:opacity-100 transition flex-1 min-w-0">
 						<i data-feather="layers" class="w-8 h-8 text-blue-600 flex-shrink-0"></i>
-						<h2 class="text-xl font-bold text-gray-900 truncate">Code Stacker</h2>
+						<h2 class="text-xl font-bold text-blue-600 truncate">Code Stacker</h2>
 					</button>
-					<button id="sidebar-close" class="lg:hidden text-gray-500 hover:text-gray-700 flex-shrink-0 transition-colors p-1">
+					<button id="sidebar-close" class="lg:hidden text-gray-500 hover:text-red-500 flex-shrink-0 transition">
 						<i data-feather="x" class="w-6 h-6"></i>
 					</button>
 				</div>
-				<div class="px-4 py-6 border-b border-gray-200">
-					<button id="language-button" class="w-full flex items-center gap-2 justify-center py-2.5 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-all hover:shadow-lg">
+				<div class="px-4 pt-8 pb-4 border-b border-gray-200">
+					<button id="language-button" class="w-full flex items-center gap-2 justify-center py-2.5 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">
 						<i data-feather="globe" class="w-4 h-4"></i>
 						<span>Language</span>
 					</button>
 				</div>
-				<nav class="flex-1 overflow-y-auto py-4">${items}</nav>
+				<nav class="flex-1 overflow-y-auto py-3 px-2"></nav>
 			</div>
 		`;
 		
@@ -104,19 +223,6 @@ export async function renderSidebar() {
 		overlay.addEventListener('click', eventHandlers.overlayHandler);
 		header.addEventListener('click', eventHandlers.headerHandler);
 		
-		document.querySelectorAll('.sidebar-item').forEach(item => {
-			const handler = () => {
-				item.classList.add('animate-scaleIn');
-				setTimeout(() => item.classList.remove('animate-scaleIn'), 300);
-				
-				if (window.innerWidth < 1024) {
-					setTimeout(() => toggleSidebar(false), 150);
-				}
-			};
-			eventHandlers.sidebarItemHandlers.push({ element: item, handler });
-			item.addEventListener('click', handler);
-		});
-		
 		eventHandlers.languageHandler = (e) => {
 			if (e.target.closest('#language-button')) {
 				openLanguageModal();
@@ -124,7 +230,7 @@ export async function renderSidebar() {
 		};
 		el.addEventListener('click', eventHandlers.languageHandler);
 		
-		updateActiveItem();
+		await renderSidebarContent();
 		feather.replace();
 	};
 	
@@ -153,21 +259,15 @@ function toggleSidebar(open) {
 }
 
 function updateActiveItem() {
-	const hash = window.location.hash.slice(1) || 'index';
+	const hash = window.location.hash.slice(1) || 'terms-index';
 	const [page] = hash.split('?');
 	
 	document.querySelectorAll('.sidebar-item').forEach(item => {
 		const isActive = item.dataset.page === page;
 		
-		if (isActive) {
-			item.classList.add('animate-slideInRight');
-			setTimeout(() => item.classList.remove('animate-slideInRight'), 300);
-		}
-		
-		item.classList.toggle('bg-blue-50', isActive);
-		item.classList.toggle('text-blue-600', isActive);
+		item.classList.toggle('bg-blue-600', isActive);
+		item.classList.toggle('text-white', isActive);
 		item.classList.toggle('font-semibold', isActive);
-		item.classList.toggle('shadow-sm', isActive);
 	});
 }
 

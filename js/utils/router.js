@@ -50,13 +50,13 @@ class Router {
 		if (!hash) {
 			const currentLang = state.getLang();
 			const query = currentLang !== 'en' ? `?lang=${currentLang}` : '';
-			window.location.hash = `index${query}`;
-			return { page: 'index', lang: currentLang };
+			window.location.hash = `terms-index${query}`;
+			return { page: 'terms-index', lang: currentLang };
 		}
 		
 		const [path, query] = hash.split('?');
 		const params = new URLSearchParams(query || '');
-		return { page: path || 'index', lang: params.get('lang') };
+		return { page: path || 'terms-index', lang: params.get('lang') };
 	}
 	
 	async navigate() {
@@ -81,7 +81,7 @@ class Router {
 			if (!data) {
 				const currentLang = state.getLang();
 				const query = currentLang !== 'en' ? `?lang=${currentLang}` : '';
-				window.location.hash = `index${query}`;
+				window.location.hash = `terms-index${query}`;
 				return;
 			}
 			
@@ -91,7 +91,7 @@ class Router {
 			console.error('Navigation error:', error);
 			const currentLang = state.getLang();
 			const query = currentLang !== 'en' ? `?lang=${currentLang}` : '';
-			window.location.hash = `index${query}`;
+			window.location.hash = `terms-index${query}`;
 		} finally {
 			isNavigating = false;
 		}
@@ -116,7 +116,7 @@ class Router {
 		if (!el) return;
 		
 		renderHeader(data);
-		el.innerHTML = '<div class="px-8 py-10 animate-fadeIn" id="terms-content"></div>';
+		el.innerHTML = '<div class="px-4 py-6 animate-fadeIn" id="terms-content"></div>';
 		
 		const content = document.getElementById('terms-content');
 		if (!content) return;

@@ -1,21 +1,45 @@
 import { state } from './state.js';
 import { parseTelegramMentions } from './textParser.js';
-import { languageConfig } from '../config/languages.js';
+import { buildStructure } from './structureLoader.js';
 
-const BASE_URL = 'https://thecodestacker.github.io';
+const BASE_URL = '';
 const contentCache = new Map();
 
-async function fetchMarkdownContent(lang, id) {
-	const url = `${BASE_URL}/js/data/${lang}/${id}.md`;
+async function fetchMarkdownContent(lang, path) {
+	const url = `${BASE_URL}/js/data/${lang}/${path}.md`;
 	const response = await fetch(url);
 	if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
 	return response.text();
 }
 
+function flattenRegistry(registry, result = {}) {
+	for (const [key, value] of Object.entries(registry)) {
+		if (value.type === 'group' && value.children) {
+			for (const [subKey, subValue] of Object.entries(value.children)) {
+				if (subValue.children) {
+					for (const [itemKey, itemData] of Object.entries(subValue.children)) {
+						result[itemKey] = itemData;
+					}
+				} else if (subValue.path) {
+					result[subKey] = subValue;
+				}
+			}
+		} else if (value.path) {
+			result[key] = value;
+		}
+	}
+	return result;
+}
+
 export async function getDataFiles() {
 	const lang = state.getLang();
-	const registry = languageConfig[lang].registry;
-	return Object.entries(registry).map(([id, cfg]) => ({ id, title: cfg.title, icon: cfg.icon }));
+	const registry = await buildStructure(lang);
+	const flattened = flattenRegistry(registry);
+	return Object.entries(flattened).map(([id, cfg]) => ({ 
+		id, 
+		title: cfg.title, 
+		icon: cfg.icon 
+	}));
 }
 
 export async function loadDataFile(id) {
@@ -23,11 +47,14 @@ export async function loadDataFile(id) {
 	const cacheKey = `${lang}-${id}`;
 	if (contentCache.has(cacheKey)) return contentCache.get(cacheKey);
 	
-	const cfg = languageConfig[lang].registry[id];
+	const registry = await buildStructure(lang);
+	const flattened = flattenRegistry(registry);
+	const cfg = flattened[id];
+	
 	if (!cfg) return null;
 	
 	try {
-		let content = await fetchMarkdownContent(lang, id);
+		let content = await fetchMarkdownContent(lang, cfg.path);
 		content = parseTelegramMentions(content);
 		marked.setOptions({
 			breaks: true,

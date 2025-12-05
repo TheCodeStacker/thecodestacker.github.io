@@ -1,0 +1,57 @@
+{
+  "blogs": {
+    "title": {
+      "en": "Blogs",
+      "id": "Blogs"
+    },
+    "icon": "folder",
+    "files": {
+      "web-code-stacker-reflections": {
+        "title": {
+          "en": "Refleksi Membangun Web Code Stacker: Perjalanan Arsitektur SPA yang Modular",
+          "id": "Refleksi Membangun Web Code Stacker: Perjalanan Arsitektur SPA yang Modular"
+        },
+        "icon": "file"
+      }
+    }
+  },
+  "terms": {
+    "title": {
+      "en": "Terms",
+      "id": "Terms"
+    },
+    "icon": "folder",
+    "files": {
+      "index": {
+        "title": {
+          "en": "Selamat Datang di Code Stacker",
+          "id": "Selamat Datang di Code Stacker"
+        },
+        "icon": "file"
+      },
+      "term-and-condition": {
+        "title": {
+          "en": "Syarat dan Ketentuan Layanan Bot Telegram",
+          "id": "Syarat dan Ketentuan Layanan Bot Telegram"
+        },
+        "icon": "file"
+      }
+    }
+  },
+  "tutorials": {
+    "title": {
+      "en": "Tutorials",
+      "id": "Tutorials"
+    },
+    "icon": "folder",
+    "files": {
+      "welcome": {
+        "title": {
+          "en": "Welcome to Code Stacker Blog",
+          "id": "Welcome to Code Stacker Blog"
+        },
+        "icon": "file"
+      }
+    }
+  }
+}
