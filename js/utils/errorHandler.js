@@ -3,10 +3,15 @@ class ErrorHandler {
 		this.initialized = false;
 		this.errorLog = [];
 		this.maxLogSize = 100;
+		this.consoleLog = [];
+		this.maxConsoleLogSize = 200;
+		this.originalConsole = {};
 	}
 
 	init() {
 		if (this.initialized) return;
+
+		this.interceptConsole();
 
 		window.addEventListener('error', (event) => {
 			event.preventDefault();
@@ -14,7 +19,10 @@ class ErrorHandler {
 			if (event.message === 'Script error.' && !event.filename) {
 				this.handleError(new Error('External script loading error (likely CORS)'), {
 					type: 'cross_origin_script',
-					message: 'A script from an external source failed to load or execute'
+					message: 'A script from an external source failed to load or execute',
+					filename: event.filename || 'unknown',
+					lineno: event.lineno || 0,
+					colno: event.colno || 0
 				});
 				return;
 			}
@@ -39,6 +47,41 @@ class ErrorHandler {
 		this.checkRequiredLibraries();
 
 		this.initialized = true;
+	}
+
+	interceptConsole() {
+		const methods = ['log', 'info', 'warn', 'error', 'debug'];
+		
+		methods.forEach(method => {
+			this.originalConsole[method] = console[method];
+			
+			console[method] = (...args) => {
+				this.logConsole(method, args);
+				this.originalConsole[method].apply(console, args);
+			};
+		});
+	}
+
+	logConsole(level, args) {
+		const entry = {
+			level,
+			timestamp: new Date().toISOString(),
+			message: args.map(arg => {
+				if (typeof arg === 'object') {
+					try {
+						return JSON.stringify(arg, null, 2);
+					} catch (e) {
+						return String(arg);
+					}
+				}
+				return String(arg);
+			}).join(' ')
+		};
+
+		this.consoleLog.push(entry);
+		if (this.consoleLog.length > this.maxConsoleLogSize) {
+			this.consoleLog.shift();
+		}
 	}
 
 	checkRequiredLibraries() {
@@ -69,7 +112,8 @@ class ErrorHandler {
 			userAgent: navigator.userAgent,
 			url: window.location.href,
 			screenSize: `${window.innerWidth}x${window.innerHeight}`,
-			online: navigator.onLine
+			online: navigator.onLine,
+			consoleSnapshot: [...this.consoleLog]
 		};
 
 		this.errorLog.push(errorInfo);
@@ -83,7 +127,7 @@ class ErrorHandler {
 		console.groupEnd();
 
 		if (this.shouldShowModal(error, context)) {
-			this.showErrorModalDirect(error);
+			this.showErrorModalDirect(error, context);
 		}
 	}
 
@@ -101,20 +145,25 @@ class ErrorHandler {
 		return true;
 	}
 
-	showErrorModalDirect(error) {
+	showErrorModalDirect(error, context = {}) {
 		try {
 			const existingModal = document.getElementById('error-modal');
 			if (existingModal) {
 				existingModal.remove();
 			}
 
+			const stackTrace = this.formatStackTrace(error, context);
+			const consoleOutput = this.getConsoleOutput();
+
 			const errorDetails = {
 				message: error.message || 'Unknown error occurred',
 				name: error.name || 'Error',
-				stack: error.stack || 'No stack trace available',
+				stack: stackTrace,
 				timestamp: new Date().toISOString(),
 				url: window.location.href,
-				userAgent: navigator.userAgent
+				userAgent: navigator.userAgent,
+				context: context,
+				consoleLog: this.consoleLog
 			};
 
 			const errorJson = JSON.stringify(errorDetails, null, 2);
@@ -124,7 +173,7 @@ class ErrorHandler {
 			modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4';
 			
 			modal.innerHTML = `
-				<div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+				<div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
 					<div class="p-6 border-b border-gray-200 bg-gradient-to-r from-red-50 to-red-100">
 						<div class="flex items-center gap-4">
 							<div class="bg-red-500 p-3 rounded-full">
@@ -151,8 +200,8 @@ class ErrorHandler {
 									<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
 								</svg>
 								<div class="flex-1">
-									<p class="font-bold text-red-900 mb-1">${errorDetails.name}</p>
-									<p class="text-red-800 text-sm break-words">${errorDetails.message}</p>
+									<p class="font-bold text-red-900 mb-1">${this.escapeHtml(errorDetails.name)}</p>
+									<p class="text-red-800 text-sm break-words">${this.escapeHtml(errorDetails.message)}</p>
 								</div>
 							</div>
 						</div>
@@ -167,7 +216,7 @@ class ErrorHandler {
 							<dl class="space-y-2 text-sm">
 								<div class="flex gap-2">
 									<dt class="font-semibold text-gray-700 min-w-[100px]">Type:</dt>
-									<dd class="text-gray-600 break-all">${errorDetails.name}</dd>
+									<dd class="text-gray-600 break-all">${this.escapeHtml(errorDetails.name)}</dd>
 								</div>
 								<div class="flex gap-2">
 									<dt class="font-semibold text-gray-700 min-w-[100px]">Time:</dt>
@@ -175,26 +224,50 @@ class ErrorHandler {
 								</div>
 								<div class="flex gap-2">
 									<dt class="font-semibold text-gray-700 min-w-[100px]">Location:</dt>
-									<dd class="text-gray-600 break-all">${errorDetails.url}</dd>
+									<dd class="text-gray-600 break-all">${this.escapeHtml(errorDetails.url)}</dd>
 								</div>
+								${context.filename ? `
+								<div class="flex gap-2">
+									<dt class="font-semibold text-gray-700 min-w-[100px]">File:</dt>
+									<dd class="text-gray-600 break-all">${this.escapeHtml(context.filename)}</dd>
+								</div>
+								` : ''}
+								${context.lineno ? `
+								<div class="flex gap-2">
+									<dt class="font-semibold text-gray-700 min-w-[100px]">Line:</dt>
+									<dd class="text-gray-600">${context.lineno}${context.colno ? `:${context.colno}` : ''}</dd>
+								</div>
+								` : ''}
 							</dl>
 						</div>
 
 						<div class="bg-gray-900 rounded-lg overflow-hidden">
 							<div class="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-700">
 								<span class="text-gray-300 text-sm font-semibold">Stack Trace</span>
-								<button id="error-copy" class="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition">
+								<button id="error-copy-stack" class="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition">
 									Copy
 								</button>
 							</div>
-							<pre class="p-4 text-xs text-gray-100 overflow-x-auto max-h-64"><code>${errorDetails.stack}</code></pre>
+							<pre class="p-4 text-xs text-gray-100 overflow-x-auto max-h-64 whitespace-pre-wrap break-words"><code>${this.escapeHtml(stackTrace)}</code></pre>
+						</div>
+
+						<div class="bg-gray-900 rounded-lg overflow-hidden">
+							<div class="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-700">
+								<span class="text-gray-300 text-sm font-semibold">Console Output (Last ${this.consoleLog.length} entries)</span>
+								<button id="error-copy-console" class="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition">
+									Copy
+								</button>
+							</div>
+							<div class="p-4 max-h-80 overflow-y-auto">
+								${consoleOutput}
+							</div>
 						</div>
 
 						<details class="bg-blue-50 border border-blue-200 rounded-lg overflow-hidden">
 							<summary class="cursor-pointer px-4 py-3 font-semibold text-blue-900 hover:bg-blue-100 transition">
 								Full Error Report (JSON)
 							</summary>
-							<pre class="p-4 text-xs text-gray-800 overflow-x-auto bg-white border-t border-blue-200"><code>${errorJson}</code></pre>
+							<pre class="p-4 text-xs text-gray-800 overflow-x-auto bg-white border-t border-blue-200 max-h-96"><code>${this.escapeHtml(errorJson)}</code></pre>
 						</details>
 
 						<div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
@@ -241,9 +314,26 @@ class ErrorHandler {
 			document.getElementById('error-close')?.addEventListener('click', closeModal);
 			document.getElementById('error-close-alt')?.addEventListener('click', closeModal);
 			
-			document.getElementById('error-copy')?.addEventListener('click', () => {
-				navigator.clipboard.writeText(errorJson);
-				const btn = document.getElementById('error-copy');
+			document.getElementById('error-copy-stack')?.addEventListener('click', () => {
+				navigator.clipboard.writeText(stackTrace);
+				const btn = document.getElementById('error-copy-stack');
+				if (btn) {
+					const originalText = btn.textContent;
+					btn.textContent = 'Copied!';
+					btn.classList.add('bg-green-600');
+					setTimeout(() => {
+						btn.textContent = originalText;
+						btn.classList.remove('bg-green-600');
+					}, 2000);
+				}
+			});
+
+			document.getElementById('error-copy-console')?.addEventListener('click', () => {
+				const consoleText = this.consoleLog.map(entry => 
+					`[${entry.timestamp}] [${entry.level.toUpperCase()}] ${entry.message}`
+				).join('\n');
+				navigator.clipboard.writeText(consoleText);
+				const btn = document.getElementById('error-copy-console');
 				if (btn) {
 					const originalText = btn.textContent;
 					btn.textContent = 'Copied!';
@@ -263,6 +353,84 @@ class ErrorHandler {
 			console.error('Failed to show error modal:', modalError);
 			alert(`An error occurred: ${error.message}\n\nPlease refresh the page.`);
 		}
+	}
+
+	getConsoleOutput() {
+		if (this.consoleLog.length === 0) {
+			return '<div class="text-gray-500 text-xs">No console output recorded</div>';
+		}
+
+		return this.consoleLog.map(entry => {
+			const levelColors = {
+				log: 'text-gray-300',
+				info: 'text-blue-400',
+				warn: 'text-yellow-400',
+				error: 'text-red-400',
+				debug: 'text-purple-400'
+			};
+
+			const levelIcons = {
+				log: '📝',
+				info: 'ℹ️',
+				warn: '⚠️',
+				error: '❌',
+				debug: '🐛'
+			};
+
+			const color = levelColors[entry.level] || 'text-gray-300';
+			const icon = levelIcons[entry.level] || '•';
+			const time = new Date(entry.timestamp).toLocaleTimeString();
+
+			return `
+				<div class="text-xs mb-2 pb-2 border-b border-gray-800">
+					<div class="flex items-start gap-2">
+						<span class="flex-shrink-0">${icon}</span>
+						<span class="text-gray-500 flex-shrink-0">${time}</span>
+						<span class="${color} flex-1 break-words whitespace-pre-wrap">${this.escapeHtml(entry.message)}</span>
+					</div>
+				</div>
+			`;
+		}).join('');
+	}
+
+	formatStackTrace(error, context = {}) {
+		let stack = '';
+		
+		if (error.stack) {
+			stack = error.stack;
+		} else {
+			stack = `${error.name || 'Error'}: ${error.message || 'Unknown error'}`;
+			
+			if (context.filename) {
+				stack += `\n    at ${context.filename}`;
+				if (context.lineno) {
+					stack += `:${context.lineno}`;
+					if (context.colno) {
+						stack += `:${context.colno}`;
+					}
+				}
+			}
+		}
+
+		if (context.type === 'cross_origin_script' && context.message) {
+			stack = `External Script Error: ${context.message}\n\n` + stack;
+		}
+
+		if (context.type === 'unhandled_promise') {
+			stack = `Unhandled Promise Rejection\n\n` + stack;
+		}
+
+		if (context.type === 'missing_dependencies' && context.libraries) {
+			stack = `Missing Required Libraries: ${context.libraries.join(', ')}\n\n` + stack;
+		}
+
+		return stack;
+	}
+
+	escapeHtml(text) {
+		const div = document.createElement('div');
+		div.textContent = text;
+		return div.innerHTML;
 	}
 
 	wrapAsync(fn, contextInfo = {}) {
@@ -297,12 +465,23 @@ class ErrorHandler {
 		return this.errorLog;
 	}
 
+	getConsoleLog() {
+		return this.consoleLog;
+	}
+
 	clearErrorLog() {
 		this.errorLog = [];
 	}
 
+	clearConsoleLog() {
+		this.consoleLog = [];
+	}
+
 	exportErrorLog() {
-		const data = JSON.stringify(this.errorLog, null, 2);
+		const data = JSON.stringify({
+			errorLog: this.errorLog,
+			consoleLog: this.consoleLog
+		}, null, 2);
 		const blob = new Blob([data], { type: 'application/json' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
