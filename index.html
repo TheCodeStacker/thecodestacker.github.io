@@ -4,10 +4,12 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Code Stacker</title>
-	<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.17/dist/index.global.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/marked@17.0.1/lib/marked.umd.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.2/dist/feather.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/country-flag-emoji@1.0.3/dist/country-flag-emoji.umd.min.js"></script>
+	
+	<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.17/dist/index.global.min.js" crossorigin="anonymous" onerror="handleScriptError('Tailwind')"></script>
+	<script src="https://cdn.jsdelivr.net/npm/marked@17.0.1/lib/marked.umd.min.js" crossorigin="anonymous" onerror="handleScriptError('Marked')"></script>
+	<script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.2/dist/feather.min.js" crossorigin="anonymous" onerror="handleScriptError('Feather')"></script>
+	<script src="https://cdn.jsdelivr.net/npm/country-flag-emoji@1.0.3/dist/country-flag-emoji.umd.min.js" crossorigin="anonymous" onerror="handleScriptError('CountryFlag')"></script>
+	
 	<script type="tailwind-config">
 		{
 			theme: {
@@ -49,6 +51,60 @@
 			}
 		}
 	</script>
+	
+	<script>
+		window.scriptErrors = [];
+		
+		function handleScriptError(scriptName) {
+			console.error(`Failed to load ${scriptName}`);
+			window.scriptErrors.push(scriptName);
+		}
+		
+		window.addEventListener('DOMContentLoaded', () => {
+			if (window.scriptErrors.length > 0) {
+				document.querySelector('.container').innerHTML = `
+					<div class="flex justify-center items-center min-h-screen bg-gray-50">
+						<div class="text-center p-8 max-w-md">
+							<div class="text-yellow-600 text-6xl mb-4">⚠️</div>
+							<h1 class="text-2xl font-bold mb-2 text-gray-900">Loading Issues</h1>
+							<p class="text-gray-600 mb-4">
+								Failed to load required libraries:
+							</p>
+							<ul class="text-left text-sm text-gray-600 mb-6 space-y-1">
+								${window.scriptErrors.map(s => `<li>• ${s}</li>`).join('')}
+							</ul>
+							<button 
+								onclick="location.reload()" 
+								class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+							>
+								Retry
+							</button>
+						</div>
+					</div>
+				`;
+			}
+		});
+	</script>
+	
+	<style>
+		.container:empty::before {
+			content: "";
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			width: 50px;
+			height: 50px;
+			border: 4px solid #e5e7eb;
+			border-top-color: #3b82f6;
+			border-radius: 50%;
+			animation: spin 1s linear infinite;
+		}
+		
+		@keyframes spin {
+			to { transform: translate(-50%, -50%) rotate(360deg); }
+		}
+	</style>
 </head>
 <body class="bg-gray-50 min-h-screen scroll-smooth">
 	<div class="container"></div>
