@@ -6,7 +6,7 @@ import { router } from './utils/router.js';
 import { state } from './utils/state.js';
 import { errorHandler } from './utils/errorHandler.js';
 
-async function initApp() {
+export async function initApp() {
 	try {
 		// Initialize error handler first
 		errorHandler.init();
@@ -68,6 +68,3 @@ async function initApp() {
 		throw error;
 	}
 }
-
-// Export as default for dynamic import
-export default initApp;
