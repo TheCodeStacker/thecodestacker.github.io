@@ -4,42 +4,52 @@ import { renderLanguageModal } from './components/languageModal.js';
 import { renderAdminHeader } from './components/adminHeader.js';
 import { router } from './utils/router.js';
 import { state } from './utils/state.js';
+import { errorHandler } from './utils/errorHandler.js';
 
 async function initApp() {
-	const container = document.querySelector('.container');
+	try {
+		errorHandler.init();
 
-	container.innerHTML = `
-		<div class="flex min-h-screen">
-			<div id="sidebar"></div>
-			<div class="flex-1">
-				<div id="admin-header"></div>
-				<div class="max-w-4xl mx-auto px-2 py-6 pt-24">
-					<div class="bg-white rounded-lg shadow-sm overflow-hidden">
-						<div id="header"></div>
-						<div id="content"></div>
+		const container = document.querySelector('.container');
+
+		container.innerHTML = `
+			<div class="flex min-h-screen">
+				<div id="sidebar"></div>
+				<div class="flex-1">
+					<div id="admin-header"></div>
+					<div class="max-w-4xl mx-auto px-2 py-6 pt-24">
+						<div class="bg-white rounded-lg shadow-sm overflow-hidden">
+							<div id="header"></div>
+							<div id="content"></div>
+						</div>
+						<div id="copyright"></div>
 					</div>
-					<div id="copyright"></div>
 				</div>
 			</div>
-		</div>
-	`;
+		`;
 
-	state.init();
+		state.init();
 
-	if (!window.location.hash) {
-		const currentLang = state.getLang();
-		const query = currentLang !== 'en' ? `?lang=${currentLang}` : '';
-		window.location.hash = `index${query}`;
+		if (!window.location.hash) {
+			const currentLang = state.getLang();
+			const query = currentLang !== 'en' ? `?lang=${currentLang}` : '';
+			window.location.hash = `index${query}`;
+		}
+
+		await renderSidebar();
+		renderAdminHeader();
+		renderCopyright();
+		renderLanguageModal();
+
+		feather.replace();
+
+		router.init();
+	} catch (error) {
+		errorHandler.handleError(error, {
+			type: 'initialization',
+			location: 'initApp'
+		});
 	}
-
-	await renderSidebar();
-	renderAdminHeader();
-	renderCopyright();
-	renderLanguageModal();
-
-	feather.replace();
-
-	router.init();
 }
 
 initApp().catch(error => {

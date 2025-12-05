@@ -1,4 +1,5 @@
 import { getFolderIcon } from '../config/structure.js';
+import { errorHandler } from './errorHandler.js';
 
 const structureCache = new Map();
 const BASE_URL = '';
@@ -18,21 +19,26 @@ async function loadManifest() {
 
 	try {
 		const response = await fetch(`${BASE_URL}/js/data/manifest.json`);
-		if (response.ok) {
-			const manifest = await response.json();
-			structureCache.set(cacheKey, manifest);
-			return manifest;
+		
+		if (!response.ok) {
+			throw new Error(`Failed to fetch manifest.json: ${response.status} ${response.statusText}`);
 		}
+		
+		const manifest = await response.json();
+		structureCache.set(cacheKey, manifest);
+		return manifest;
+		
 	} catch (error) {
-		console.error('Failed to load manifest.json:', error);
+		errorHandler.handleError(error, {
+			type: 'load_manifest',
+			location: 'loadManifest'
+		});
+		throw error;
 	}
-	
-	throw new Error('manifest.json not found');
 }
 
 function sortByTitle(items) {
 	return items.sort((a, b) => {
-		// Safe title extraction with fallback
 		const titleA = (a.title || a.key || '').toString().toLowerCase();
 		const titleB = (b.title || b.key || '').toString().toLowerCase();
 		return titleA.localeCompare(titleB);
@@ -40,7 +46,6 @@ function sortByTitle(items) {
 }
 
 function getTitle(titleData, lang) {
-	// Handle different title formats
 	if (!titleData) return '';
 	
 	if (typeof titleData === 'string') {
@@ -48,11 +53,8 @@ function getTitle(titleData, lang) {
 	}
 	
 	if (typeof titleData === 'object') {
-		// Try current language first
 		if (titleData[lang]) return titleData[lang];
-		// Fallback to English
 		if (titleData.en) return titleData.en;
-		// Fallback to first available language
 		const firstKey = Object.keys(titleData)[0];
 		if (firstKey) return titleData[firstKey];
 	}
@@ -79,7 +81,6 @@ export async function buildStructure(lang) {
 				children: {}
 			};
 
-			// Process files in the main folder
 			if (folderData.files) {
 				for (const [fileName, fileData] of Object.entries(folderData.files)) {
 					const fileKey = `${folderName}-${fileName}`;
@@ -91,7 +92,6 @@ export async function buildStructure(lang) {
 				}
 			}
 
-			// Process subfolders
 			if (folderData.subfolders) {
 				for (const [subfolderName, subfolderData] of Object.entries(folderData.subfolders)) {
 					const subfolder = {
@@ -111,7 +111,6 @@ export async function buildStructure(lang) {
 						}
 					}
 
-					// Sort subfolder children
 					const sortedSubChildren = {};
 					const subItems = Object.entries(subfolder.children).map(([k, v]) => ({
 						key: k,
@@ -129,7 +128,6 @@ export async function buildStructure(lang) {
 				}
 			}
 
-			// Sort folder children (separate subfolders and files)
 			const sortedChildren = {};
 			const subfolders = [];
 			const files = [];
@@ -148,13 +146,11 @@ export async function buildStructure(lang) {
 				}
 			}
 
-			// Sort and add subfolders first
 			sortByTitle(subfolders).forEach(item => {
 				const {key, ...rest} = item;
 				sortedChildren[key] = rest;
 			});
 
-			// Sort and add files
 			sortByTitle(files).forEach(item => {
 				const {key, ...rest} = item;
 				sortedChildren[key] = rest;
@@ -164,7 +160,6 @@ export async function buildStructure(lang) {
 			structure[folderName] = folder;
 		}
 
-		// Sort top-level folders
 		const sortedStructure = {};
 		const topLevelItems = Object.entries(structure).map(([k, v]) => ({
 			key: k,
@@ -181,8 +176,12 @@ export async function buildStructure(lang) {
 		return sortedStructure;
 		
 	} catch (error) {
-		console.error('Error building structure:', error);
-		// Return minimal structure to prevent complete failure
+		errorHandler.handleError(error, {
+			type: 'build_structure',
+			location: 'buildStructure',
+			lang
+		});
+		
 		return {
 			'terms': {
 				title: 'Terms',
